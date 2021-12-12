@@ -14,10 +14,12 @@ public class Player : NetworkBehaviour {
     [SerializeField] private bool enableReconsiliation = true;
 
     private List<InputData> inputBuffer = new List<InputData>();
-    private PositionData cachedPositionData;
+    private PositionData positionData;
     private InputData previousInput;
     private int previousTick;
     private Rigidbody[] cachedRigidbodies;
+
+    private PositionData cachedPositionData;
 
     public new CustomNetworkManager NetworkManager => (CustomNetworkManager)base.NetworkManager;
 
@@ -54,6 +56,8 @@ public class Player : NetworkBehaviour {
                 AngularVelocity = rb.angularVelocity,
                 Tick = NetworkManager.LocalTime.Tick
             });
+        } else {
+
         }
     }
 
@@ -65,20 +69,20 @@ public class Player : NetworkBehaviour {
 
         // Check position/rotation threshold here. If too much, reconcile.
 
-        if(enableReconsiliation && cachedPositionData != null) {
-            rb.position = cachedPositionData.Position;
-            rb.rotation = cachedPositionData.Rotation;
-            rb.velocity = cachedPositionData.Velocity;
-            rb.angularVelocity = cachedPositionData.AngularVelocity;
+        if(enableReconsiliation && positionData != null) {
+            rb.position = positionData.Position;
+            rb.rotation = positionData.Rotation;
+            rb.velocity = positionData.Velocity;
+            rb.angularVelocity = positionData.AngularVelocity;
 
             PhysicsController.Instance.MoveRigidbodyToScene(rb);
-            foreach (InputData data in inputBuffer.Where(i => i.Tick > cachedPositionData.Tick)) {
+            foreach (InputData data in inputBuffer.Where(i => i.Tick > positionData.Tick)) {
                 ProcessInput(data);
                 PhysicsController.Instance.SimulatePhysics(NetworkManager.NetworkTickSystem.LocalTime.FixedDeltaTime);
             }
             PhysicsController.Instance.ReturnRigidbody();
 
-            cachedPositionData = null;
+            positionData = null;
         }
 
         Vector2 input = new Vector2(Input.GetAxis("Horizontal"), Input.GetAxis("Vertical"));
@@ -121,8 +125,8 @@ public class Player : NetworkBehaviour {
 
     [ClientRpc(Delivery = RpcDelivery.Unreliable)]
     private void SendPosition_ClientRpc(PositionData newPositionData) {
-        if(cachedPositionData == null || cachedPositionData.Tick < newPositionData.Tick) {
-            cachedPositionData = newPositionData;
+        if(positionData == null || positionData.Tick < newPositionData.Tick) {
+            positionData = cachedPositionData = newPositionData;
         }
     }
 
