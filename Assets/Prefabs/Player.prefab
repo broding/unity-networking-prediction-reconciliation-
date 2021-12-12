@@ -146,6 +146,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   rb: {fileID: 3703679719576956603}
+  enableReconsiliation: 1
 --- !u!54 &3703679719576956603
 Rigidbody:
   m_ObjectHideFlags: 0

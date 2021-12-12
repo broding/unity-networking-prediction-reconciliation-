@@ -7,12 +7,18 @@ using UnityEngine;
 
 public class Player : NetworkBehaviour {
 
+    [Header("References")]
     [SerializeField] private Rigidbody rb;
 
+    [Header("Settings")]
+    [SerializeField] private bool enableReconsiliation = true;
+
     private List<InputData> inputBuffer = new List<InputData>();
-    private List<PositionData> positionBuffer = new List<PositionData>();
+    private PositionData cachedPositionData;
     private InputData previousInput;
     private int previousTick;
+    private Rigidbody[] cachedRigidbodies;
+
     public new CustomNetworkManager NetworkManager => (CustomNetworkManager)base.NetworkManager;
 
     public override void OnNetworkSpawn() {
@@ -59,18 +65,20 @@ public class Player : NetworkBehaviour {
 
         // Check position/rotation threshold here. If too much, reconcile.
 
-        PositionData positionData = positionBuffer.FirstOrDefault();
-        if(positionData != null) {
-            rb.position = positionData.Position;
-            rb.rotation = positionData.Rotation;
-            rb.velocity = positionData.Velocity;
-            rb.angularVelocity = positionData.AngularVelocity;
-            positionBuffer.Remove(positionData);
-            Debug.Log("input to reconsile: " + inputBuffer.Count(i => i.Tick > positionData.Tick));
-            foreach (InputData data in inputBuffer.Where(i => i.Tick > positionData.Tick)) {
+        if(enableReconsiliation && cachedPositionData != null) {
+            rb.position = cachedPositionData.Position;
+            rb.rotation = cachedPositionData.Rotation;
+            rb.velocity = cachedPositionData.Velocity;
+            rb.angularVelocity = cachedPositionData.AngularVelocity;
+
+            PhysicsController.Instance.MoveRigidbodyToScene(rb);
+            foreach (InputData data in inputBuffer.Where(i => i.Tick > cachedPositionData.Tick)) {
                 ProcessInput(data);
-                Physics.Simulate(NetworkManager.NetworkTickSystem.LocalTime.FixedDeltaTime);
+                PhysicsController.Instance.SimulatePhysics(NetworkManager.NetworkTickSystem.LocalTime.FixedDeltaTime);
             }
+            PhysicsController.Instance.ReturnRigidbody();
+
+            cachedPositionData = null;
         }
 
         Vector2 input = new Vector2(Input.GetAxis("Horizontal"), Input.GetAxis("Vertical"));
@@ -112,15 +120,16 @@ public class Player : NetworkBehaviour {
     }
 
     [ClientRpc(Delivery = RpcDelivery.Unreliable)]
-    private void SendPosition_ClientRpc(PositionData positionData) {
-        positionBuffer.Add(positionData);
-        positionBuffer = positionBuffer.OrderBy(p => p.Tick).ToList();
+    private void SendPosition_ClientRpc(PositionData newPositionData) {
+        if(cachedPositionData == null || cachedPositionData.Tick < newPositionData.Tick) {
+            cachedPositionData = newPositionData;
+        }
     }
 
     private void OnDrawGizmos() {
-        PositionData latestPositionData = positionBuffer.Last();
-        if (latestPositionData != null) {
-            Gizmos.matrix = Matrix4x4.TRS(latestPositionData.Position, latestPositionData.Rotation, Vector3.one);
+        if (cachedPositionData != null) {
+            Gizmos.color = Color.red;
+            Gizmos.matrix = Matrix4x4.TRS(cachedPositionData.Position, cachedPositionData.Rotation, Vector3.one);
             Gizmos.DrawWireCube(Vector3.zero, Vector3.one);
         }
     }
