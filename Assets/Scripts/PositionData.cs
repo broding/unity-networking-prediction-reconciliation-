@@ -1,3 +1,4 @@
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using Unity.Netcode;
@@ -16,5 +17,14 @@ public class PositionData : INetworkSerializable {
         serializer.SerializeValue(ref Velocity);
         serializer.SerializeValue(ref AngularVelocity);
         serializer.SerializeValue(ref Tick);
+    }
+
+    public float CalculateDelta(PositionData other) {
+        float positionDelta = (Position - other.Position).sqrMagnitude;
+        float rotationDelta = Quaternion.Angle(Rotation, other.Rotation);
+        float velocityDelta = (Velocity - other.Velocity).sqrMagnitude;
+        float angularVelocityDelta = (AngularVelocity - other.AngularVelocity).sqrMagnitude;
+
+        return positionDelta + rotationDelta + velocityDelta + angularVelocityDelta;
     }
 }

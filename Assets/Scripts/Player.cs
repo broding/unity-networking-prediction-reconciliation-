@@ -12,9 +12,11 @@ public class Player : NetworkBehaviour {
 
     [Header("Settings")]
     [SerializeField] private bool enableReconsiliation = true;
+    [SerializeField] private float maxReconsilitationDelta = 0.1f;
 
     private List<InputData> inputBuffer = new List<InputData>();
-    private PositionData positionData;
+    private List<PositionData> predictedPositions = new List<PositionData>();
+    private PositionData pendingPositionData;
     private InputData previousInput;
     private int previousTick;
     private Rigidbody[] cachedRigidbodies;
@@ -57,7 +59,13 @@ public class Player : NetworkBehaviour {
                 Tick = NetworkManager.LocalTime.Tick
             });
         } else {
-
+            predictedPositions.Add(new PositionData() {
+                Position = rb.position,
+                Rotation = rb.rotation,
+                Velocity = rb.velocity,
+                AngularVelocity = rb.angularVelocity,
+                Tick = NetworkManager.LocalTime.Tick
+            });
         }
     }
 
@@ -68,21 +76,26 @@ public class Player : NetworkBehaviour {
         }
 
         // Check position/rotation threshold here. If too much, reconcile.
+        if(pendingPositionData != null) {
+            PositionData predictedPosition = predictedPositions.FirstOrDefault(p => p.Tick == pendingPositionData.Tick);
+            if(predictedPosition != null) {
+                float delta = predictedPosition.CalculateDelta(pendingPositionData);
+                if (enableReconsiliation && delta > maxReconsilitationDelta) {
+                    rb.position = pendingPositionData.Position;
+                    rb.rotation = pendingPositionData.Rotation;
+                    rb.velocity = pendingPositionData.Velocity;
+                    rb.angularVelocity = pendingPositionData.AngularVelocity;
 
-        if(enableReconsiliation && positionData != null) {
-            rb.position = positionData.Position;
-            rb.rotation = positionData.Rotation;
-            rb.velocity = positionData.Velocity;
-            rb.angularVelocity = positionData.AngularVelocity;
+                    PhysicsController.Instance.MoveRigidbodyToScene(rb);
+                    foreach (InputData data in inputBuffer.Where(i => i.Tick > pendingPositionData.Tick)) {
+                        ProcessInput(data);
+                        PhysicsController.Instance.SimulatePhysics(NetworkManager.NetworkTickSystem.LocalTime.FixedDeltaTime);
+                    }
+                    PhysicsController.Instance.ReturnRigidbody();
 
-            PhysicsController.Instance.MoveRigidbodyToScene(rb);
-            foreach (InputData data in inputBuffer.Where(i => i.Tick > positionData.Tick)) {
-                ProcessInput(data);
-                PhysicsController.Instance.SimulatePhysics(NetworkManager.NetworkTickSystem.LocalTime.FixedDeltaTime);
+                    pendingPositionData = null;
+                }
             }
-            PhysicsController.Instance.ReturnRigidbody();
-
-            positionData = null;
         }
 
         Vector2 input = new Vector2(Input.GetAxis("Horizontal"), Input.GetAxis("Vertical"));
@@ -95,6 +108,7 @@ public class Player : NetworkBehaviour {
 
     private void InvalidateCachesFromTick(int tick) {
         inputBuffer.RemoveAll(i => i.Tick >= tick);
+        predictedPositions.RemoveAll(i => i.Tick >= tick);
     }
 
     [ServerRpc(Delivery = RpcDelivery.Unreliable)]
@@ -125,8 +139,8 @@ public class Player : NetworkBehaviour {
 
     [ClientRpc(Delivery = RpcDelivery.Unreliable)]
     private void SendPosition_ClientRpc(PositionData newPositionData) {
-        if(positionData == null || positionData.Tick < newPositionData.Tick) {
-            positionData = cachedPositionData = newPositionData;
+        if(pendingPositionData == null || pendingPositionData.Tick < newPositionData.Tick) {
+            pendingPositionData = cachedPositionData = newPositionData;
         }
     }
 
