@@ -1,0 +1,46 @@
+[Ll]ibrary/
+[Tt]emp/
+[Oo]bj/
+.vs/
+ExportedObj/
+.consulo/
+*.csproj
+*.unityproj
+*.sln
+*.suo
+*.tmp
+*.user
+*.userprefs
+*.pidb
+*.booproj
+*.svd
+*.log
+basename.exe.stackdump
+sed.exe.stackdump
+sh.exe.stackdump
+uname.exe.stackdump
+grep.exe.stackdump
+
+
+# Amplify terrain
+**/[Aa]ssets/*TerrainAutoUpgrade/*
+**/[Aa]ssets/*TerrainAutoUpgrade.*
+
+# Peek
+**/Assets/Ludiq/Ludiq.PeekCore
+**/Assets/Ludiq/Ludiq.Peek
+**/Assets/Ludiq.Generated/Transient
+**/Assets/Ludiq.Generated/Persistent/ProjectSettings/Ludiq.Peek.ProjectSettings.asset
+**/Assets/Ludiq.Generated/Persistent/ProjectSettings/Ludiq.Peek.ProjectSettings.asset.meta
+
+# Other
+ProjectSettings/Packages/com.unity.polybrush/Settings.json
+ProjectSettings/Packages/com.unity.probuilder/Settings.json
+ProjectSettings/Packages/com.unity.settings-manager/Settings.json
+
+# FMOD
+**/Assets/StreamingAssets
+**/Assets/StreamingAssets.meta
+Assets/Plugins/FMOD/Cache/Editor/FMODStudioCache.asset
+EditorLogs/AnalyticsLog.txt
+UserSettings
