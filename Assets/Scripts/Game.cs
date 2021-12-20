@@ -9,7 +9,6 @@ using UnityEditor;
 
 public class Game : MonoBehaviour {
 
-    [SerializeField] private bool isServer;
     [SerializeField] private CustomNetworkManager networkManager;
     [SerializeField] private Player playerPrefab;
 
@@ -23,6 +22,11 @@ public class Game : MonoBehaviour {
 #endif
 
         networkManager.NetworkTickSystem.Tick += OnTick;
+        networkManager.OnClientConnectedCallback += OnClientConnected;
+
+        if (networkManager.IsHost) {
+            SpawnPlayer(networkManager.LocalClientId);
+        }
     }
 
     private void OnTick() {
@@ -36,12 +40,17 @@ public class Game : MonoBehaviour {
 
     private void StartServer() {
         networkManager.StartServer();
-        
-        networkManager.OnClientConnectedCallback += OnClientConnected;
-        
     }
 
     private void OnClientConnected(ulong clientId) {
+        if (!networkManager.IsServer) {
+            return;
+        }
+
+        SpawnPlayer(clientId);
+    }
+
+    private void SpawnPlayer(ulong clientId) {
         Player player = Instantiate(playerPrefab);
         player.NetworkObject.Spawn();
         player.NetworkObject.ChangeOwnership(clientId);

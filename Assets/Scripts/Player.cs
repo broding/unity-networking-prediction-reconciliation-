@@ -19,7 +19,6 @@ public class Player : NetworkBehaviour {
     private PositionData pendingPositionData;
     private InputData previousInput;
     private int previousTick;
-    private Rigidbody[] cachedRigidbodies;
 
     private PositionData cachedPositionData;
 
@@ -40,10 +39,12 @@ public class Player : NetworkBehaviour {
     }
 
     private void OnBeforeTick() {
+        if (IsClient) {
+            OnClientBeforeTick();
+        }
+
         if (IsServer) {
-            OnServerTick();
-        } else {
-            OnClientTick();
+            OnServerAfterTick();
         }
     }
 
@@ -58,7 +59,8 @@ public class Player : NetworkBehaviour {
                 AngularVelocity = rb.angularVelocity,
                 Tick = NetworkManager.LocalTime.Tick
             });
-        } else {
+        } 
+        if (IsClient) {
             predictedPositions.Add(new PositionData() {
                 Position = rb.position,
                 Rotation = rb.rotation,
@@ -69,14 +71,13 @@ public class Player : NetworkBehaviour {
         }
     }
 
-    private void OnClientTick() {
+    private void OnClientBeforeTick() {
         if(previousTick >= NetworkManager.LocalTime.Tick) {
-            Debug.Log("Tick has reset");
             InvalidateCachesFromTick(NetworkManager.LocalTime.Tick);
         }
 
         // Check position/rotation threshold here. If too much, reconcile.
-        if(pendingPositionData != null) {
+        if(!IsHost && pendingPositionData != null) {
             PositionData predictedPosition = predictedPositions.FirstOrDefault(p => p.Tick == pendingPositionData.Tick);
             if(predictedPosition != null) {
                 float delta = predictedPosition.CalculateDelta(pendingPositionData);
@@ -102,7 +103,10 @@ public class Player : NetworkBehaviour {
         InputData inputData = new InputData() { Input = input, Tick = NetworkManager.LocalTime.Tick };
 
         SendInput_ServerRpc(inputData);
-        ProcessInput(inputData);
+        if (!IsHost) {
+            ProcessInput(inputData);
+        }
+
         inputBuffer.Add(inputData);
     }
 
@@ -116,11 +120,10 @@ public class Player : NetworkBehaviour {
         inputBuffer.Add(inputData);
     }
 
-    private void OnServerTick() {
+    private void OnServerAfterTick() {
         int tick = NetworkManager.LocalTime.Tick;
         InputData inputData = inputBuffer.FirstOrDefault(i => i.Tick == tick);
         if(inputData.Tick == 0) {
-            Debug.LogError("No input for tick: " + tick);
             inputData = previousInput;
         } else {
             inputBuffer.Remove(inputData);
