@@ -23,6 +23,7 @@ public class Game : MonoBehaviour {
 
         networkManager.NetworkTickSystem.Tick += OnTick;
         networkManager.OnClientConnectedCallback += OnClientConnected;
+        networkManager.NetworkTimeSystem.LocalBufferSec = (1f / 60f) * 5f;
 
         if (networkManager.IsHost) {
             SpawnPlayer(networkManager.LocalClientId);

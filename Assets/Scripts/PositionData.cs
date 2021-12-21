@@ -25,6 +25,6 @@ public class PositionData : INetworkSerializable {
         float velocityDelta = (Velocity - other.Velocity).sqrMagnitude;
         float angularVelocityDelta = (AngularVelocity - other.AngularVelocity).sqrMagnitude;
 
-        return positionDelta + rotationDelta + velocityDelta + angularVelocityDelta;
+        return positionDelta + velocityDelta + (rotationDelta + angularVelocityDelta) / 5f;
     }
 }
