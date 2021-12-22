@@ -3,6 +3,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+using Unity.Collections;
 using Unity.Netcode;
 using UnityEngine;
 
@@ -31,6 +32,12 @@ public class Player : NetworkBehaviour {
 
         NetworkManager.BeforeTick += OnBeforeTick;
         NetworkManager.AfterTick += OnAfterTick;
+
+        if (IsClient) {
+            NetworkManager.CustomMessagingManager.RegisterNamedMessageHandler(CustomMessageNames.INPUT_LOST, (senderClientId, messagePayload) => {
+                TickController.Instance.ReportInputLoss();
+            });
+        }
     }
 
     public override void OnNetworkDespawn() {
@@ -52,9 +59,9 @@ public class Player : NetworkBehaviour {
 
     private void OnClientBeforeTick() {
         int tickDelta = NetworkManager.LocalTime.Tick - NetworkManager.ServerTime.Tick;
+
         if (previousTick >= NetworkManager.LocalTime.Tick) {
-            Debug.LogError($"Reset thing from tick {previousTick} --> {NetworkManager.LocalTime.Tick} (changed = {previousTick - NetworkManager.LocalTime.Tick} (Tickdelta: {tickDelta}");
-            InvalidateCachesFromTick(NetworkManager.LocalTime.Tick);
+            Debug.LogError($"Reset thing from tick {previousTick} --> {NetworkManager.LocalTime.Tick} (changed = {previousTick - NetworkManager.LocalTime.Tick} (Tickdelta: {tickDelta}) Last pendiing position tick: {pendingPositionData?.Tick} - tick time {NetworkManager.LocalTime.FixedDeltaTime}"); 
         }
 
         if(!IsHost && pendingPositionData != null) {
@@ -63,15 +70,21 @@ public class Player : NetworkBehaviour {
                 float delta = predictedPosition.CalculateDelta(pendingPositionData);
                 if (enableReconsiliation && delta > maxReconsilitationDelta) {
                     Debug.Log($"Reconsiliated!");
+
+                    // Remove previous predicted positions from the current authorative position on. 
+                    predictedPositions.RemoveAll(i => i.Tick > predictedPosition.Tick);
+
                     rb.position = pendingPositionData.Position;
                     rb.rotation = pendingPositionData.Rotation;
                     rb.velocity = pendingPositionData.Velocity;
                     rb.angularVelocity = pendingPositionData.AngularVelocity;
 
+                    // Replay input and simulate physics for each input
                     PhysicsController.Instance.MoveRigidbodyToScene(rb);
                     foreach (InputData data in inputBuffer.Where(i => i.Tick > pendingPositionData.Tick)) {
                         ProcessInput(data);
                         PhysicsController.Instance.SimulatePhysics(NetworkManager.NetworkTickSystem.LocalTime.FixedDeltaTime);
+                        RecordPredictedPosition(data.Tick);
                     }
                     PhysicsController.Instance.ReturnRigidbody();
 
@@ -84,9 +97,11 @@ public class Player : NetworkBehaviour {
         InputData inputData = new InputData() { Input = input, Tick = NetworkManager.LocalTime.Tick };
         inputBuffer.Put(inputData);
 
-        const int historySize = 10;
-        int actualSize = Math.Min(inputBuffer.Count, historySize);
-        InputDataHistory inputDataHistory = new InputDataHistory(inputBuffer.TakeLast(actualSize).ToArray(), NetworkManager.LocalTime.Tick);
+        const int minHistorySize = 15;
+        const int maxHistorySize = 100;
+        int historySize = Mathf.Clamp(tickDelta, Math.Min(inputBuffer.Count, minHistorySize), maxHistorySize);
+        historySize = Math.Min(inputBuffer.Count, historySize);
+        InputDataHistory inputDataHistory = new InputDataHistory(inputBuffer.TakeLast(historySize).ToArray(), NetworkManager.LocalTime.Tick);
 
         SendInput_ServerRpc(inputDataHistory);
         if (!IsHost) {
@@ -94,10 +109,14 @@ public class Player : NetworkBehaviour {
         }
     }
 
-    private void InvalidateCachesFromTick(int tick) {
-        throw new NotImplementedException();
-        //inputBuffer.RemoveAll(i => i.Tick >= tick);
-        predictedPositions.RemoveAll(i => i.Tick >= tick);
+    private void RecordPredictedPosition(int tick) {
+        predictedPositions.Add(new PositionData() {
+            Position = rb.position,
+            Rotation = rb.rotation,
+            Velocity = rb.velocity,
+            AngularVelocity = rb.angularVelocity,
+            Tick = tick
+        });
     }
 
     private void OnServerBeforeTick() {
@@ -109,6 +128,7 @@ public class Player : NetworkBehaviour {
         } else {
             inputData = previousInput;
             Debug.LogError($"Input not found for tick {tick}. Highest tick buffer count was {serverInputBuffer.OrderByDescending(i => i.Key).First().Key}");
+            NetworkManager.CustomMessagingManager.SendNamedMessage(CustomMessageNames.INPUT_LOST, OwnerClientId, new FastBufferWriter(0, Allocator.Temp), NetworkDelivery.Reliable);
         }
 
         ProcessInput(inputData);
@@ -128,13 +148,7 @@ public class Player : NetworkBehaviour {
             });
         } 
         if (IsClient) {
-            predictedPositions.Add(new PositionData() {
-                Position = rb.position,
-                Rotation = rb.rotation,
-                Velocity = rb.velocity,
-                AngularVelocity = rb.angularVelocity,
-                Tick = NetworkManager.LocalTime.Tick
-            });
+            RecordPredictedPosition(NetworkManager.LocalTime.Tick);
         }
     }
 
