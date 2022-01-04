@@ -1,48 +1,68 @@
+using System;
 using System.Collections;
 using System.Collections.Generic;
+using Unity.Netcode;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
-public class PhysicsController {
+public class PhysicsController : MonoBehaviour {
 
-    private Scene scene;
+    public event Action OnBeforePhysicsTick;
+    public event Action OnAfterPhysicsTick;
+
+    private Scene temporaryScene;
     private Scene defaultScene;
-    private PhysicsScene physicsScene;
-    private Rigidbody target;
+    private PhysicsScene temporaryPhysicsScene;
 
-    public PhysicsController() {
-        scene = SceneManager.CreateScene("Physics");
-        physicsScene = scene.GetPhysicsScene();
+    private GameObject target;
+
+    public void Initialize() { 
+        NetworkManager.Singleton.NetworkTickSystem.Tick += OnTick;
+
+        if (NetworkManager.Singleton.IsClient) {
+            temporaryScene = SceneManager.CreateScene("Physics");
+            temporaryPhysicsScene = temporaryScene.GetPhysicsScene();
+        }
     }
 
-    public void MoveRigidbodyToScene(Rigidbody target) {
-        this.target = target;
-        defaultScene = target.gameObject.scene;
-        SceneManager.MoveGameObjectToScene(target.gameObject, scene);
+    private void OnDestroy() {
+        NetworkManager.Singleton.NetworkTickSystem.Tick -= OnTick;
+    }
+
+    private void OnTick() {
+        OnBeforePhysicsTick?.Invoke();
+        Physics.Simulate(NetworkManager.Singleton.NetworkTickSystem.LocalTime.FixedDeltaTime);
+        OnAfterPhysicsTick?.Invoke();
+    }
+
+    public void MoveGameObjectToTemporaryScene(GameObject gameObject) {
+        this.target = gameObject;
+        defaultScene = target.scene;
+        SceneManager.MoveGameObjectToScene(target, temporaryScene);
     }
 
     public void ReturnRigidbody() {
-        SceneManager.MoveGameObjectToScene(target.gameObject, defaultScene);
+        SceneManager.MoveGameObjectToScene(target, defaultScene);
     }
 
     public void SimulatePhysics(float step) {
-        physicsScene.Simulate(step);
-    }
-
-    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
-    static void ResetSingleton() {
-        instance = null;
+        temporaryPhysicsScene.Simulate(step);
     }
 
     public static PhysicsController Instance {
         get {
             if (instance == null) {
-                instance = new PhysicsController();
+                instance = FindObjectOfType<PhysicsController>();
             }
 
             return instance;
         }
     }
+
     private static PhysicsController instance;
 
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+    static void ResetSingleton() {
+        instance = null;
+    }
 }

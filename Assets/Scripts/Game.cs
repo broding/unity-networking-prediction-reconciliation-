@@ -9,41 +9,32 @@ using UnityEditor;
 
 public class Game : MonoBehaviour {
 
-    [SerializeField] private CustomNetworkManager networkManager;
-    [SerializeField] private Player playerPrefab;
+    [SerializeField] private PlayerShared playerPrefab;
 
     private void Start() {
 #if UNITY_EDITOR
         if (ParrelSync.ClonesManager.IsClone()) {
-            StartServer();
+            NetworkManager.Singleton.StartServer();
         } else {
-            StartClient();
+            NetworkManager.Singleton.StartClient();
         }
 #endif
 
-        networkManager.NetworkTickSystem.Tick += OnTick;
-        networkManager.OnClientConnectedCallback += OnClientConnected;
+        NetworkManager.Singleton.OnClientConnectedCallback += OnClientConnected;
 
-        if (networkManager.IsHost) {
-            SpawnPlayer(networkManager.LocalClientId);
+        if (NetworkManager.Singleton.IsHost) {
+            SpawnPlayer(NetworkManager.Singleton.LocalClientId);
         }
-    }
 
-    private void OnTick() {
-        networkManager.Tick();
+        PhysicsController.Instance.Initialize();
     }
 
     private void OnDestroy() {
-        networkManager.OnClientConnectedCallback -= OnClientConnected;
-        networkManager.NetworkTickSystem.Tick -= OnTick;
-    }
-
-    private void StartServer() {
-        networkManager.StartServer();
+        NetworkManager.Singleton.OnClientConnectedCallback -= OnClientConnected;
     }
 
     private void OnClientConnected(ulong clientId) {
-        if (!networkManager.IsServer) {
+        if (!NetworkManager.Singleton.IsServer) {
             return;
         }
 
@@ -51,12 +42,8 @@ public class Game : MonoBehaviour {
     }
 
     private void SpawnPlayer(ulong clientId) {
-        Player player = Instantiate(playerPrefab);
+        PlayerShared player = Instantiate(playerPrefab);
         player.NetworkObject.Spawn();
         player.NetworkObject.ChangeOwnership(clientId);
-    }
-
-    private void StartClient() {
-        networkManager.StartClient();
     }
 }

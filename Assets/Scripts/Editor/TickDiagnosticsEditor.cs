@@ -16,12 +16,16 @@ public class TickDiagnosticsEditor : EditorWindow {
             return;
         }
 
-        int tickDelta = NetworkManager.Singleton.LocalTime.Tick - NetworkManager.Singleton.ServerTime.Tick;
+        int localTick = NetworkManager.Singleton.LocalTime.Tick;
+        int tickDelta = localTick - NetworkManager.Singleton.ServerTime.Tick;
+        uint tickRate = NetworkManager.Singleton.NetworkTickSystem.TickRate;
+        double localBuffer = NetworkManager.Singleton.NetworkTimeSystem.LocalBufferSec;
 
-        EditorGUILayout.LabelField("Tick rate", NetworkManager.Singleton.NetworkTickSystem.TickRate.ToString());
-        EditorGUILayout.LabelField("Local tick buffer", (NetworkManager.Singleton.NetworkTimeSystem.LocalBufferSec * NetworkManager.Singleton.NetworkTickSystem.TickRate).ToString());
-        EditorGUILayout.LabelField("Tick difference", (NetworkManager.Singleton.LocalTime.Tick - NetworkManager.Singleton.ServerTime.Tick).ToString());
-        EditorGUILayout.LabelField("Real RTT", $"{tickDelta * (1f / NetworkManager.Singleton.NetworkTickSystem.TickRate)} sec.");
+        EditorGUILayout.LabelField("Tick rate", tickRate.ToString());
+        EditorGUILayout.LabelField("Local tick buffer", (localBuffer * tickRate).ToString());
+        EditorGUILayout.LabelField("Tick difference", (tickDelta).ToString());
+        EditorGUILayout.LabelField("Real RTT", $"{tickDelta * (1f / tickRate)} sec.");
+        NetworkManager.Singleton.NetworkTimeSystem.LocalBufferSec = EditorGUILayout.Slider((float)localBuffer, 0.001f, 1);
     }
 
     public void OnInspectorUpdate() {
